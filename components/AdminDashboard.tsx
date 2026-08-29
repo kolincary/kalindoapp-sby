@@ -1181,6 +1181,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
    const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
    const [isBulkTargetModalOpen, setIsBulkTargetModalOpen] = useState(false);
    const [isBulkAccessModalOpen, setIsBulkAccessModalOpen] = useState(false);
+   const [isBulkDeleteAccessModalOpen, setIsBulkDeleteAccessModalOpen] = useState(false);
+   const [isDeletingAccess, setIsDeletingAccess] = useState(false);
    const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
 
    // Supabase Config State
@@ -8038,10 +8040,60 @@ if (filterPackingShift !== 'ALL') {
    const confirmDeleteUser = async () => {
       if (!userToDelete) return;
       const email = userToDelete;
-      const { error } = await supabase.from('app_users').delete().eq('email', email);
-      if (error) { alert("Failed to delete user: " + error.message); }
-      else { setLocalPermissions(prev => { const next = { ...prev }; delete next[email]; return next; }); setBlockedUsers(prev => { const next = { ...prev }; delete next[email]; return next; }); setLocalManualInput(prev => { const next = { ...prev }; delete next[email]; return next; }); }
+      try {
+         const { error } = await supabase.from('app_users').delete().eq('email', email);
+         if (error) {
+            alert("Failed to delete user: " + error.message);
+         } else {
+            setLocalPermissions(prev => { const next = { ...prev }; delete next[email]; return next; });
+            setBlockedUsers(prev => { const next = { ...prev }; delete next[email]; return next; });
+            setLocalManualInput(prev => { const next = { ...prev }; delete next[email]; return next; });
+            setSelectedAccessEmails(prev => prev.filter(e => e !== email));
+            setSuccessToast(`User ${email} berhasil dihapus dari Supabase`);
+         }
+      } catch (err: any) {
+         alert("Gagal menghapus user: " + (err.message || err));
+      }
       setUserToDelete(null);
+   };
+
+   const handleBulkDeleteAccess = async () => {
+      if (selectedAccessEmails.length === 0) return;
+      setIsDeletingAccess(true);
+      try {
+         const emailsToDelete = [...selectedAccessEmails];
+         const { error } = await supabase
+            .from('app_users')
+            .delete()
+            .in('email', emailsToDelete);
+
+         if (error) throw error;
+
+         setLocalPermissions(prev => {
+            const next = { ...prev };
+            emailsToDelete.forEach(email => delete next[email]);
+            return next;
+         });
+         setBlockedUsers(prev => {
+            const next = { ...prev };
+            emailsToDelete.forEach(email => delete next[email]);
+            return next;
+         });
+         setLocalManualInput(prev => {
+            const next = { ...prev };
+            emailsToDelete.forEach(email => delete next[email]);
+            return next;
+         });
+
+         setSelectedAccessEmails([]);
+         setIsBulkDeleteAccessModalOpen(false);
+         setSuccessToast(`Berhasil menghapus ${emailsToDelete.length} user account dari Supabase`);
+      } catch (err: any) {
+         console.error("Gagal hapus user massal:", err);
+         alert("Gagal menghapus user: " + (err.message || err));
+      } finally {
+         setIsDeletingAccess(false);
+      }
    };
 
    // --- PIN RESET LOGIC ---
@@ -9369,7 +9421,7 @@ if (filterPackingShift !== 'ALL') {
 
                            <div className={`flex flex-wrap gap-2 w-full xl:w-auto justify-start sm:justify-end ${activeView === 'EMPLOYEES' ? 'items-center mt-2 xl:mt-0' : ''}`}>
                               {activeView === 'EMPLOYEES' && (<><input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileInputChange} /><div className="flex flex-wrap gap-2 w-full sm:w-auto"><button onClick={() => setIsImportModalOpen(true)} className="flex-grow sm:flex-grow-0 flex items-center justify-center gap-2 px-3 py-2 rounded-xl font-bold text-xs sm:text-sm bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-200 h-11"><Upload size={14} /> Import</button><button onClick={handleExportCSV} className="flex-grow sm:flex-grow-0 flex items-center justify-center gap-2 px-3 py-2 rounded-xl font-bold text-xs sm:text-sm bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-200 h-11"><Download size={14} /> Export</button>{selectedEmployeeIds.length > 0 && (<><button onClick={() => setIsBulkDeleteModalOpen(true)} className="flex-grow sm:flex-grow-0 flex items-center justify-center gap-2 px-3 py-2 rounded-xl font-bold text-xs sm:text-sm bg-red-500 text-white shadow-md hover:bg-red-600 h-11"><Trash2 size={14} /> Delete</button><button onClick={handleOpenBulkTargetModal} className="flex-grow sm:flex-grow-0 flex items-center justify-center gap-2 px-3 py-2 rounded-xl font-bold text-xs sm:text-sm bg-indigo-600 text-white shadow-md hover:bg-indigo-700 h-11"><Target size={14} /> Target</button><button onClick={handleOpenBulkEditModal} className="flex-grow sm:flex-grow-0 flex items-center justify-center gap-2 px-3 py-2 rounded-xl font-bold text-xs sm:text-sm bg-purple-600 text-white shadow-md hover:bg-purple-700 h-11"><CheckSquare size={14} /> Edit</button></>)}<button onClick={() => handleOpenEmployeeModal()} className="flex-grow sm:flex-grow-0 flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm bg-blue-600 text-white shadow-md hover:bg-blue-700 h-11"><Plus size={16} /> Tambah</button></div></>)}
-                              {activeView === 'ACCESS' && (<><button onClick={() => setIsAddUserModalOpen(true)} className="flex-grow sm:flex-grow-0 flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50 shadow-sm h-11"><UserPlus size={18} /> Add User</button>{selectedAccessEmails.length > 0 && (<button onClick={() => setIsBulkAccessModalOpen(true)} className="flex-grow sm:flex-grow-0 flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm bg-purple-600 text-white shadow-md hover:bg-purple-700 h-11"><CheckSquare size={16} /> Edit Access</button>)}<button onClick={handleSave} className={`flex-grow sm:flex-grow-0 flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm shadow-md h-11 ${saved ? 'bg-green-500 text-white' : 'bg-blue-600 text-white'}`}><Save size={18} /> {saved ? 'Saved' : 'Save'}</button></>)}
+                              {activeView === 'ACCESS' && (<><button onClick={() => setIsAddUserModalOpen(true)} className="flex-grow sm:flex-grow-0 flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50 shadow-sm h-11"><UserPlus size={18} /> Add User</button>{selectedAccessEmails.length > 0 && (<><button onClick={() => setIsBulkDeleteAccessModalOpen(true)} className="flex-grow sm:flex-grow-0 flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm bg-red-600 text-white shadow-md hover:bg-red-700 h-11"><Trash2 size={16} /> Hapus User ({selectedAccessEmails.length})</button><button onClick={() => setIsBulkAccessModalOpen(true)} className="flex-grow sm:flex-grow-0 flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm bg-purple-600 text-white shadow-md hover:bg-purple-700 h-11"><CheckSquare size={16} /> Edit Access</button></>)}<button onClick={handleSave} className={`flex-grow sm:flex-grow-0 flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm shadow-md h-11 ${saved ? 'bg-green-500 text-white' : 'bg-blue-600 text-white'}`}><Save size={18} /> {saved ? 'Saved' : 'Save'}</button></>)}
                               {activeView === 'ADMIN_MANAGEMENT' && (<button onClick={() => handleOpenAdminModal()} className="flex-grow sm:flex-grow-0 flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm bg-blue-600 text-white shadow-md hover:bg-blue-700 h-11"><Plus size={18} /> Add Admin</button>)}
                               {['DASHBOARD'].includes(activeView) && (<button onClick={handleSave} className={`flex-grow sm:flex-grow-0 flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm shadow-md h-11 ${saved ? 'bg-green-500 text-white' : 'bg-blue-600 text-white'}`}><Save size={18} /> {saved ? 'Saved' : 'Save Changes'}</button>)}
                            </div>
@@ -18091,6 +18143,39 @@ INV-789012`}
                         ))}
                      </div>
                      <button onClick={() => setIsBulkAccessModalOpen(false)} className="mt-6 w-full py-3 rounded-xl border hover:bg-gray-50 dark:hover:bg-gray-700">Close</button>
+                  </div>
+               </div>
+            )
+         }
+
+         {
+            isBulkDeleteAccessModalOpen && (
+               <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                  <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => !isDeletingAccess && setIsBulkDeleteAccessModalOpen(false)}></div>
+                  <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl shadow-2xl relative z-10 p-6 animate-[popIn_0.2s_ease-out]">
+                     <div className="flex flex-col items-center text-center">
+                        <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center text-red-500 mb-4 border-4 border-red-50 dark:border-red-900/10">
+                           <Trash2 size={32} />
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Hapus User Account?</h3>
+                        <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
+                           Apakah Anda yakin ingin menghapus <span className="font-bold text-red-600 dark:text-red-400">{selectedAccessEmails.length}</span> user account terpilih dari database Supabase?
+                        </p>
+                        <div className="w-full max-h-36 overflow-y-auto bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-200 dark:border-gray-700 text-left text-xs font-mono text-gray-600 dark:text-gray-300 space-y-1 mb-6">
+                           {selectedAccessEmails.map(email => (
+                              <div key={email} className="truncate flex items-center gap-1.5">
+                                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"></span>
+                                 <span className="truncate">{email}</span>
+                              </div>
+                           ))}
+                        </div>
+                        <div className="flex gap-3 w-full">
+                           <button onClick={() => setIsBulkDeleteAccessModalOpen(false)} disabled={isDeletingAccess} className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-bold rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Batal</button>
+                           <button onClick={handleBulkDeleteAccess} disabled={isDeletingAccess} className="flex-1 py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 shadow-lg shadow-red-500/30 transition-colors flex items-center justify-center gap-2">
+                              {isDeletingAccess ? <Loader2 className="animate-spin" size={18} /> : 'Ya, Hapus Semua'}
+                           </button>
+                        </div>
+                     </div>
                   </div>
                </div>
             )
